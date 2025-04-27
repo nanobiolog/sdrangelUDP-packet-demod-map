@@ -1,0 +1,65 @@
+body {
+    margin: 0;
+    padding: 0;
+    font-family: sans-serif;
+    display: flex;
+    height: 100vh;
+}
+
+#container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+}
+
+#map {
+    height: 100%;
+    flex-grow: 1; /* Map takes remaining space */
+}
+
+#sidebar {
+    width: 300px; /* Fixed width for the sidebar */
+    height: 100%;
+    overflow-y: auto; /* Add scroll if content overflows */
+    border-left: 1px solid #ccc;
+    padding: 10px;
+    box-sizing: border-box; /* Include padding in width */
+}
+
+#sidebar h2 {
+    margin-top: 0;
+    font-size: 1.2em;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+}
+
+#message-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+#message-list li {
+    border-bottom: 1px solid #eee;
+    padding: 8px 0;
+    font-size: 0.9em;
+}
+
+#message-list li:last-child {
+    border-bottom: none;
+}
+
+#message-list .callsign {
+    font-weight: bold;
+}
+
+#message-list .timestamp {
+    color: #666;
+    font-size: 0.8em;
+    display: block; /* Put timestamp on its own line */
+    margin-bottom: 3px;
+}
+
+#message-list .message-data {
+    margin-top: 5px;
+}
