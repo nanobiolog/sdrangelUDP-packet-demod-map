@@ -80,9 +80,13 @@ def parse_packet(data):
         else:
             data_start = 16
 
+        # Data field bytes
+        data_bytes = data[data_start:]
         # Data field (ASCII)
-        data_str = data[data_start:].decode('utf-8', errors='ignore')
+        data_str = data_bytes.decode('utf-8', errors='ignore')
         data_str = ''.join(c for c in data_str if c in string.printable).strip()
+        # Data field (Hex)
+        data_hex = data_bytes.hex()
 
         # Type (simplified)
         frame_type = "UI" if control == 0x03 else "Unknown"
@@ -124,6 +128,7 @@ def parse_packet(data):
             "Type": frame_type,
             "PID": pid_str,
             "Data": data_str,
+            "Data_Hex": data_hex, # Add hex representation
             "latitude": latitude, # Add extracted coordinates
             "longitude": longitude # Add extracted coordinates
         }

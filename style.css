@@ -24,7 +24,35 @@ body {
     border-left: 1px solid #ccc;
     padding: 10px;
     box-sizing: border-box; /* Include padding in width */
+    display: flex; /* Use flexbox for layout */
+    flex-direction: column; /* Stack children vertically */
 }
+
+#controls {
+    padding-bottom: 10px;
+    border-bottom: 1px solid #ccc;
+    margin-bottom: 10px;
+}
+
+#controls h3 {
+    margin-top: 5px;
+    margin-bottom: 5px;
+    font-size: 1em;
+}
+
+#controls input[type="text"] {
+    width: calc(100% - 12px); /* Adjust width considering padding/border */
+    padding: 4px;
+    margin-bottom: 5px;
+    box-sizing: border-box;
+}
+
+#controls button {
+    padding: 5px 10px;
+    margin-right: 5px;
+    cursor: pointer;
+}
+
 
 #sidebar h2 {
     margin-top: 0;
@@ -37,13 +65,29 @@ body {
     list-style: none;
     padding: 0;
     margin: 0;
+    flex-shrink: 0; /* Prevent header from shrinking */
+}
+
+#message-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    flex-grow: 1; /* Allow list to take remaining space */
+    overflow-y: auto; /* Enable scrolling for the list only */
 }
 
 #message-list li {
     border-bottom: 1px solid #eee;
     padding: 8px 0;
     font-size: 0.9em;
+    position: relative; /* For positioning the delete button */
 }
+
+/* Style for hidden messages due to filtering */
+#message-list li.hidden {
+    display: none;
+}
+
 
 #message-list li:last-child {
     border-bottom: none;
@@ -62,4 +106,94 @@ body {
 
 #message-list .message-data {
     margin-top: 5px;
+}
+
+.delete-button {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: #ffdddd;
+    border: 1px solid #ffaaaa;
+    color: #cc0000;
+    cursor: pointer;
+    font-size: 0.8em;
+    padding: 2px 5px;
+    border-radius: 3px;
+}
+
+.delete-button:hover {
+    background: #ffcccc;
+}
+
+/* Detail Panel Styles */
+#detail-panel {
+    width: 350px; /* Width for the detail panel */
+    height: 100%;
+    border-left: 1px solid #ccc;
+    background-color: #f9f9f9;
+    padding: 10px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    position: relative; /* For close button positioning */
+    overflow-y: auto; /* Allow scrolling if content overflows */
+}
+
+#detail-panel.hidden {
+    display: none; /* Hide the panel by default */
+}
+
+#detail-panel h2 {
+    margin-top: 0;
+    font-size: 1.2em;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+    flex-shrink: 0; /* Prevent header shrinking */
+}
+
+#detail-content {
+    flex-grow: 1; /* Allow content to fill space */
+    overflow-y: auto; /* Scroll content if needed */
+    font-size: 0.9em;
+    line-height: 1.4;
+}
+
+#detail-content div {
+    margin-bottom: 8px;
+}
+
+#detail-content strong {
+    display: inline-block;
+    width: 80px; /* Align labels */
+    font-weight: bold;
+    vertical-align: top; /* Align label with multi-line content */
+}
+
+#detail-content span {
+    display: inline-block;
+    width: calc(100% - 90px); /* Adjust based on label width */
+    word-wrap: break-word; /* Wrap long content */
+}
+
+#detail-close-button {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: #eee;
+    border: 1px solid #ccc;
+    color: #333;
+    cursor: pointer;
+    font-size: 1em;
+    padding: 1px 6px;
+    border-radius: 3px;
+    line-height: 1;
+}
+
+#detail-close-button:hover {
+    background: #ddd;
+}
+
+/* Highlight selected message */
+#message-list li.highlighted {
+    background-color: #eaf2ff; /* Light blue background */
 }

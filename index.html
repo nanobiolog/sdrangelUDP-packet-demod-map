@@ -16,10 +16,26 @@
     <div id="container">
         <div id="map"></div>
         <div id="sidebar">
-            <h2>Received Messages</h2>
+            <h2>APRS Data</h2>
+            <div id="controls">
+                <h3>Filter</h3>
+                <input type="text" id="filter-from" placeholder="Filter From...">
+                <input type="text" id="filter-to" placeholder="Filter To...">
+                <input type="text" id="filter-data" placeholder="Filter Data...">
+                <button id="clear-filters">Clear Filters</button>
+                <h3>Actions</h3>
+                <button id="delete-all-messages">Delete All Messages</button>
+            </div>
             <ul id="message-list">
                 <!-- Messages will be added here -->
             </ul>
+        </div>
+        <div id="detail-panel" class="hidden">
+             <button id="detail-close-button" title="Close details">X</button>
+             <h2>Packet Details</h2>
+             <div id="detail-content">
+                 <!-- Details will be populated here -->
+             </div>
         </div>
     </div>
     <script src="script.js"></script>
