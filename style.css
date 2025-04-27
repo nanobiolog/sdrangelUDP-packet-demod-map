@@ -53,6 +53,28 @@ body {
     cursor: pointer;
 }
 
+#controls #enable-notifications { /* Added style for notification button */
+    padding: 5px 10px;
+    margin-right: 5px;
+    cursor: pointer;
+    margin-top: 5px; /* Add some top margin */
+}
+
+#controls #stop-sound { /* Added style for stop sound button */
+    padding: 5px 10px;
+    margin-right: 5px;
+    cursor: pointer;
+    margin-top: 5px;
+    background-color: #ffdddd; /* Make it visually distinct, like delete */
+    border: 1px solid #ffaaaa;
+    color: #cc0000;
+    display: none; /* Hide by default (JS will show it) */
+}
+
+#controls #stop-sound:hover {
+    background-color: #ffcccc;
+}
+
 
 #sidebar h2 {
     margin-top: 0;
@@ -87,7 +109,6 @@ body {
 #message-list li.hidden {
     display: none;
 }
-
 
 #message-list li:last-child {
     border-bottom: none;

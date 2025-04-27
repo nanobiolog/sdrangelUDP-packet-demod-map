@@ -15,56 +15,47 @@
    - Use `pip` to install the required libraries:
      ```bash
      pip install -r requirements.txt
-     ```
-
-4. **Set Up a Local Server**
-   - If you don't have a local server, you can use Python's built-in HTTP server:
+   ```
+   - The `aiohttp` library is also required:
      ```bash
-     python -m http.server
+     pip install aiohttp
      ```
+   *(Note: If you previously installed libraries from a `requirements.txt`, ensure `aiohttp` is added or install it separately)*
 
-5. **Open the Application**
-   - Open `index.html` in your web browser (e.g., http://localhost:8000) to view the application locally.
+4. **Open the Application**
+   - The Python script now includes the web server. See Usage below.
 
 ## Usage
 
-1. **Run the APRS Receiver Script**
-   - This script listens for UDP packets (default port 9999) and forwards parsed APRS data via WebSocket (default port 8765).
+1. **Run the Combined Server Script**
+   - This single script listens for UDP packets (default port 9999), serves the web files (`index.html`, `script.js`, `style.css`), and handles WebSocket connections, all on a single port (default 8080).
    - Start the script in a terminal:
      ```bash
      python receive_aprs.py
      ```
+   - The server will print messages indicating it's running and listening on UDP port 9999 and HTTP/WebSocket port 8080.
 
-2. **Run the Local Web Server**
-   - To view the `index.html` page, you need a web server. Use Python's built-in server in the project directory. Open a *separate* terminal for this:
-     ```bash
-     # Serve on port 8000 (default)
-     python -m http.server 8000
-     # OR serve on port 80 (might require admin/sudo privileges)
-     python -m http.server 80
+2. **Access Locally**
+   - Open your web browser and navigate to:
      ```
-   - Access the map locally via `http://localhost:8000` or `http://localhost:80` depending on the port you chose.
+     http://localhost:8080
+     ```
 
 3. **(Optional) Access Remotely with Ngrok**
    - To access your map from the internet, you can use [ngrok](https://ngrok.com/).
-   - First, ensure your Python HTTP server is running (Step 2).
+   - First, ensure the `receive_aprs.py` script is running (Step 1).
    - Install ngrok and authenticate it.
-   - Open *another* terminal and run ngrok, pointing it to the port your local server is using:
+   - Open *another* terminal and run ngrok, pointing it to the port the Python script is using (8080):
      ```bash
-     # If your server is on port 8000
-     ngrok http 8000
-     # If your server is on port 80
-     ngrok http 80
+     ngrok http 8080
      # If you have a static ngrok domain (replace with yours)
-     ngrok http --domain=your-static-domain.ngrok-free.app 80
+     # ngrok http --domain=your-static-domain.ngrok-free.app 8080
      ```
    - Ngrok will provide a public URL (e.g., `https://random-string.ngrok-free.app`). Use this URL to access your map from anywhere.
-   - **Note:** For the WebSocket connection (live data updates) to work remotely via ngrok, you might need to:
-     a) Update the WebSocket URL in `script.js` to use the ngrok domain (e.g., `wss://your-ngrok-domain...`).
-     b) Potentially tunnel the WebSocket port (8765) as well, depending on your setup and ngrok plan.
+   - The WebSocket connection should now work automatically through the same ngrok tunnel.
 
 4. **View the Map**
-   - Open the local URL (`http://localhost:PORT`) or the ngrok URL in your browser to view the Leaflet map displaying APRS data.
+   - Open the local URL (`http://localhost:8080`) or the ngrok URL in your browser to view the Leaflet map displaying APRS data.
 
 5. **Customize the Application**
    - Modify `script.js` to adjust the map's behavior, WebSocket connection, or data handling.

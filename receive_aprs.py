@@ -4,243 +4,180 @@ import string
 import datetime
 import shutil
 import asyncio
-import websockets
-import json # To send data as JSON
+import json
+import re
+import os # For file paths
+from aiohttp import web, WSMsgType
 
-UDP_IP = "0.0.0.0"  # Listen on all interfaces
-UDP_PORT = 9999     # Match SDRangel port
+# --- Configuration ---
+UDP_IP = "0.0.0.0"  # Listen on all interfaces for UDP
+UDP_PORT = 9999     # SDRangel UDP port
+WEB_HOST = "0.0.0.0" # Listen on all interfaces for HTTP/WebSocket
+WEB_PORT = 8080     # Port for combined HTTP and WebSocket server
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) # Directory of the script
 
-# Global counter for rows printed (optional now, can be removed if console output is not primary)
+# --- Global State ---
 row_count = 0
+connected_clients = set() # Store active WebSocket connections
 
-# --- WebSocket Server Setup ---
-connected_clients = set()
+# --- WebSocket Handling (aiohttp) ---
+async def websocket_handler(request):
+    """Handles WebSocket connections."""
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+    connected_clients.add(ws)
+    print(f"+++ WebSocket Client Connected: {request.remote}. Total clients: {len(connected_clients)}")
 
-async def register(websocket):
-    connected_clients.add(websocket)
-    print(f"Client connected: {websocket.remote_address}")
     try:
-        await websocket.wait_closed()
+        async for msg in ws:
+            # This server primarily sends, but we can handle incoming messages if needed
+            if msg.type == WSMsgType.TEXT:
+                print(f"Received WebSocket message: {msg.data}")
+                # Example: await ws.send_str(f"Echo: {msg.data}")
+            elif msg.type == WSMsgType.ERROR:
+                print(f"!!! WebSocket connection closed with exception {ws.exception()}")
+    except Exception as e:
+        print(f"!!! WebSocket handler error: {e}")
     finally:
-        connected_clients.remove(websocket)
-        print(f"Client disconnected: {websocket.remote_address}")
+        connected_clients.remove(ws)
+        print(f"--- WebSocket Client Disconnected: {request.remote}. Total clients: {len(connected_clients)}")
+
+    return ws
 
 async def send_to_clients(message):
+    """Sends a message (dict) as JSON to all connected WebSocket clients."""
     if connected_clients:
-        # Convert message (dict) to JSON string
-        json_message = json.dumps(message)
-        # Use asyncio.gather to send concurrently
-        await asyncio.gather(
-            *[client.send(json_message) for client in connected_clients]
-        )
+        json_message = None
+        try:
+            json_message = json.dumps(message)
+            # print(f"Sending to {len(connected_clients)} clients: {json_message[:100]}...") # Reduce console noise
+            # Create a list of tasks to send concurrently
+            tasks = [client.send_str(json_message) for client in connected_clients]
+            # Wait for all sends to complete (or fail)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            # Log any errors during sending
+            # for i, result in enumerate(results): # Reduce console noise
+            #      if isinstance(result, Exception):
+            #           client = list(connected_clients)[i] # Get corresponding client (order might not be guaranteed if set changes during await)
+            #           print(f"!!! Error sending to client {client.remote_address}: {result}")
 
-# --- APRS Parsing Logic (remains mostly the same) ---
+        except Exception as send_e:
+            print(f"!!! Error preparing/sending WebSocket message: {send_e}")
+            # if json_message: print(f"Failed message data: {json_message}")
+    # else: # Reduce console noise
+        # print("No WebSocket clients connected, message not sent.")
+
+# --- HTTP Handlers (aiohttp) ---
+async def handle_index(request):
+    """Serves index.html."""
+    file_path = os.path.join(BASE_DIR, 'index.html')
+    try:
+        return web.FileResponse(file_path)
+    except FileNotFoundError:
+        return web.Response(status=404, text="index.html not found")
+
+# Removed handle_js and handle_css as add_static handles them now
+
+# --- APRS Parsing Logic (remains the same) ---
 def decode_ax25_callsign(data, start, length=7):
-    """Decode AX.25 callsign from shifted ASCII (6 bytes + SSID)."""
     callsign = ""
     ssid = 0
     for i in range(start, start + length):
         if i < len(data):
-            char = data[i] >> 1  # Unshift AX.25 callsign byte
-            if 32 <= char <= 126:  # Printable ASCII
-                callsign += chr(char)
-            if i == start + 6:  # SSID byte
-                ssid = (data[i] & 0x1E) >> 1  # Extract SSID
+            char = data[i] >> 1
+            if 32 <= char <= 126: callsign += chr(char)
+            if i == start + 6: ssid = (data[i] & 0x1E) >> 1
     callsign = callsign.rstrip()
     return f"{callsign}-{ssid}" if ssid else callsign
 
 def parse_packet(data):
-    """Parse raw packet to extract table fields."""
     try:
-        # Current timestamp for Date and Time
         now = datetime.datetime.now()
         date = now.strftime("%Y-%m-%d")
         time = now.strftime("%H:%M:%S")
-
-        # Assume packet format: [header][control][PID][data]
-        if len(data) < 16:  # Minimum for header + control + PID
-            return None
-
-        # Extract Source and Destination callsigns
+        if len(data) < 16: return None
         src = decode_ax25_callsign(data, 0)
         dst = decode_ax25_callsign(data, 7)
-
-        # Assume control (1 byte) and PID (1 byte) follow
         control_pos = 14
-        if len(data) < control_pos + 2:
-            return None
+        if len(data) < control_pos + 2: return None
         control = data[control_pos]
         pid = data[control_pos + 1]
-
-        # Via field (simplified, assumes single digipeater or none)
         via = ""
-        if len(data) > 16 and (data[14] & 0x01) == 0:  # More addresses
-            via = decode_ax25_callsign(data, 14)
-            data_start = 21
-        else:
-            data_start = 16
+        data_start = 16
+        # Check if the 'H' bit (extension bit) is 0 for the destination address field (byte 14)
+        # If it is 0, it means there's a repeater address following.
+        if len(data) > 14 and (data[13] & 0x01) == 0: # Check extension bit of Dest SSID byte
+             via = decode_ax25_callsign(data, 14)
+             data_start = 21
+             # Potentially check for more repeater fields if needed
+             # while len(data) > data_start - 1 and (data[data_start - 8] & 0x01) == 0:
+             #     via += "," + decode_ax25_callsign(data, data_start)
+             #     data_start += 7
 
-        # Data field bytes
         data_bytes = data[data_start:]
-        # Data field (ASCII)
         data_str = data_bytes.decode('utf-8', errors='ignore')
         data_str = ''.join(c for c in data_str if c in string.printable).strip()
-        # Data field (Hex)
         data_hex = data_bytes.hex()
-
-        # Type (simplified)
         frame_type = "UI" if control == 0x03 else "Unknown"
-
-        # PID (hex)
         pid_str = f"0x{pid:02x}"
-
-        # Attempt to extract coordinates from the data string for WebSocket message
         latitude = None
         longitude = None
         try:
-            # Regex to find latitude and longitude in various formats
-            latLonRegex = r'(\d{4}\.\d{2}[NS]).?(\d{5}\.\d{2}[EW])'
+            # More robust regex allowing for different separators or none
+            latLonRegex = r'(\d{4}\.\d{2}[NS])[\\/ ]?(\d{5}\.\d{2}[EW])'
             match = re.search(latLonRegex, data_str)
             if match:
-                latDDM = match.group(1)
-                lonDDM = match.group(2)
-                # Basic DDM to DD conversion (needs a helper function like in script.js)
-                lat_deg = float(latDDM[:2])
-                lat_min = float(latDDM[2:-1])
-                lat_dir = latDDM[-1]
-                lon_deg = float(lonDDM[:3])
-                lon_min = float(lonDDM[3:-1])
-                lon_dir = lonDDM[-1]
-
+                latDDM, lonDDM = match.groups()
+                lat_deg, lat_min, lat_dir = float(latDDM[:2]), float(latDDM[2:-1]), latDDM[-1]
+                lon_deg, lon_min, lon_dir = float(lonDDM[:3]), float(lonDDM[3:-1]), lonDDM[-1]
                 latitude = lat_deg + lat_min / 60.0
                 if lat_dir == 'S': latitude *= -1
                 longitude = lon_deg + lon_min / 60.0
                 if lon_dir == 'W': longitude *= -1
         except Exception as coord_e:
-            print(f"Coordinate parsing error within parse_packet: {coord_e}") # Log coord parsing errors
-
-        return {
-            "Date": date,
-            "Time": time,
-            "From": src,
-            "To": dst,
-            "Via": via,
-            "Type": frame_type,
-            "PID": pid_str,
-            "Data": data_str,
-            "Data_Hex": data_hex, # Add hex representation
-            "latitude": latitude, # Add extracted coordinates
-            "longitude": longitude # Add extracted coordinates
-        }
+            print(f"Coordinate parsing error: {coord_e}")
+        return {"Date": date, "Time": time, "From": src, "To": dst, "Via": via,
+                "Type": frame_type, "PID": pid_str, "Data": data_str,
+                "Data_Hex": data_hex, "latitude": latitude, "longitude": longitude}
     except Exception as e:
         print(f"Parsing error: {e}")
         return None
 
 def print_row(packet, is_header=False):
-    """Print packet or header in a single row, maximizing Data column."""
     global row_count
-
-    # Get terminal width
-    try:
-        term_width = shutil.get_terminal_size().columns
-    except OSError: # Handle cases where terminal size cannot be determined (e.g., running non-interactively)
-        term_width = 80 # Default width
-
-    # Fixed column widths
-    col_widths = {
-        "Date": 10,  # YYYY-MM-DD
-        "Time": 8,   # HH:MM:SS
-        "From": 12,  # Callsign (e.g., YM2ETM-6)
-        "To": 12,    # Callsign (e.g., APRS)
-        "Via": 12,   # Callsign or empty
-        "Type": 6,   # UI, Unknown
-        "PID": 6     # 0xf0
-    }
-
-    # Calculate available width for Data
-    fixed_width = sum(col_widths.values()) + len(col_widths) * 3  # 3 spaces between columns
-    data_width = max(20, term_width - fixed_width - 2)  # Minimum 20 chars for Data
-
-    # Prepare fields
+    try: term_width = shutil.get_terminal_size().columns
+    except OSError: term_width = 80
+    col_widths = {"Date": 10, "Time": 8, "From": 12, "To": 12, "Via": 12, "Type": 6, "PID": 6}
+    fixed_width = sum(col_widths.values()) + len(col_widths) * 3
+    data_width = max(20, term_width - fixed_width - 2)
     if is_header:
-        fields = {
-            "Date": "Date".ljust(col_widths["Date"]),
-            "Time": "Time".ljust(col_widths["Time"]),
-            "From": "From".ljust(col_widths["From"]),
-            "To": "To".ljust(col_widths["To"]),
-            "Via": "Via".ljust(col_widths["Via"]),
-            "Type": "Type".ljust(col_widths["Type"]),
-            "PID": "PID".ljust(col_widths["PID"]),
-            "Data": "Data".ljust(data_width)
-        }
-    elif packet: # Ensure packet is not None
-        fields = {
-            "Date": packet.get("Date", "")[:col_widths["Date"]].ljust(col_widths["Date"]),
-            "Time": packet.get("Time", "")[:col_widths["Time"]].ljust(col_widths["Time"]),
-            "From": packet.get("From", "")[:col_widths["From"]].ljust(col_widths["From"]),
-            "To": packet.get("To", "")[:col_widths["To"]].ljust(col_widths["To"]),
-            "Via": packet.get("Via", "")[:col_widths["Via"]].ljust(col_widths["Via"]),
-            "Type": packet.get("Type", "")[:col_widths["Type"]].ljust(col_widths["Type"]),
-            "PID": packet.get("PID", "")[:col_widths["PID"]].ljust(col_widths["PID"]),
-            "Data": packet.get("Data", "")[:data_width]
-        }
-        if len(packet.get("Data", "")) > data_width:
-            fields["Data"] = packet.get("Data", "")[:data_width-3] + "..."  # Truncate with ellipsis
-    else:
-        # Handle case where packet is None but is_header is False (should not happen with current logic but good practice)
-        return
-
-    # Print row
+        fields = {k: k.ljust(w) for k, w in col_widths.items()}
+        fields["Data"] = "Data".ljust(data_width)
+    elif packet:
+        fields = {k: str(packet.get(k, ""))[:w].ljust(w) for k, w in col_widths.items()} # Ensure value is string
+        data_val = str(packet.get("Data", "")) # Ensure value is string
+        fields["Data"] = (data_val[:data_width-3] + "...") if len(data_val) > data_width else data_val[:data_width]
+    else: return
     print(f"{fields['Date']}   {fields['Time']}   {fields['From']}   {fields['To']}   {fields['Via']}   {fields['Type']}   {fields['PID']}   {fields['Data']}")
+    if not is_header: row_count += 1
 
-    # Increment row count for data rows
-    if not is_header:
-        row_count += 1
-
-# Removed the old synchronous try...while loop here
-
-async def udp_listener(loop):
-    """Listen for UDP packets and process them."""
-    try:
-        # Create UDP socket using asyncio
-        transport, protocol = await loop.create_datagram_endpoint(
-            lambda: UdpProtocol(), # Simple protocol handler
-            local_addr=(UDP_IP, UDP_PORT)
-        )
-        print(f"Listening for APRS packets on UDP port {UDP_PORT}...")
-        # Keep the listener running
-        await asyncio.Event().wait() # Keep running indefinitely
-
-    except OSError as e:
-        print(f"Error binding to UDP port {UDP_PORT}: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"UDP Listener error: {e}")
-    finally:
-        if 'transport' in locals() and transport:
-            transport.close()
-
+# --- UDP Listener Logic (using asyncio) ---
 class UdpProtocol(asyncio.DatagramProtocol):
     def connection_made(self, transport):
         self.transport = transport
 
     def datagram_received(self, data, addr):
-        # print(f"UDP Packet from {addr}") # Debugging
-        packet = parse_packet(data) # parse_packet now also extracts lat/lon if possible
+        packet = parse_packet(data)
         if packet:
-            # Send parsed packet (including potential lat/lon) to connected WebSocket clients
+            # print(f"Attempting to send packet from {packet.get('From', 'N/A')} via WebSocket...") # Reduce console noise
+            # Schedule send_to_clients without awaiting it here
             asyncio.create_task(send_to_clients(packet))
-
-            # Optional: Still print to console
+            # Print to console
             global row_count
+            if row_count % 20 == 0: print_row(None, is_header=True) # Print header less often
             print_row(packet)
-            if row_count % 10 == 0:
-                print_row(None, is_header=True)
-        else:
-            # Optionally send raw data or error message via WebSocket too
-            # error_msg = {"error": "Invalid packet", "source": str(addr), "raw_hex": data.hex()}
-            # asyncio.create_task(send_to_clients(error_msg))
-            print(f"Received from {addr}: Invalid packet (Raw hex: {data.hex()})")
+        # else: # Reduce console noise
+            # print(f"Received from {addr}: Invalid packet (Raw hex: {data.hex()})")
 
     def error_received(self, exc):
         print(f"UDP Error received: {exc}")
@@ -248,29 +185,71 @@ class UdpProtocol(asyncio.DatagramProtocol):
     def connection_lost(self, exc):
         print("UDP Socket closed")
 
+async def start_udp_listener(loop):
+    """Starts the UDP listener."""
+    try:
+        transport, protocol = await loop.create_datagram_endpoint(
+            lambda: UdpProtocol(),
+            local_addr=(UDP_IP, UDP_PORT)
+        )
+        print(f"Listening for APRS packets on UDP port {UDP_PORT}...")
+        # Keep the listener running (the web server will keep the loop alive)
+    except OSError as e:
+        print(f"Error binding to UDP port {UDP_PORT}: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"UDP Listener error: {e}")
+        # Consider if transport needs closing here
+
+# --- Main Application Setup ---
 async def main():
+    # Create aiohttp application
+    app = web.Application()
+
+    # Add routes
+    app.router.add_get('/ws', websocket_handler) # WebSocket endpoint
+    app.router.add_get('/', handle_index)        # Serve index.html at the root
+    # Serve all other static files (js, css, png, mp3, etc.) from the base directory
+    # This MUST come after specific routes like '/' and '/ws'
+    app.router.add_static('/', path=BASE_DIR, name='static', show_index=False) # show_index=False prevents serving index.html again
+
     # Get the current event loop
     loop = asyncio.get_running_loop()
 
-    # Start the WebSocket server
-    # Listen on localhost, choose a port (e.g., 8765)
-    websocket_server = await websockets.serve(register, "localhost", 8765)
-    print(f"WebSocket server started on ws://localhost:8765")
+    # Start the UDP listener as a background task
+    udp_task = loop.create_task(start_udp_listener(loop))
 
-    # Start the UDP listener task
-    udp_task = asyncio.create_task(udp_listener(loop))
+    # Setup and run the web server
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, WEB_HOST, WEB_PORT)
+    print(f"HTTP/WebSocket server started on http://{WEB_HOST}:{WEB_PORT}")
+    await site.start()
 
-    # Keep both running
-    await asyncio.gather(udp_task) # WebSocket server runs implicitly
+    # Keep the server running until interrupted
+    print("Server running. Press Ctrl+C to stop.")
+    try:
+        # Keep alive indefinitely (or until UDP task finishes, though it shouldn't)
+        await asyncio.Event().wait()
+    except asyncio.CancelledError:
+        pass # Expected on shutdown
+    finally:
+        # Cleanup
+        print("Shutting down...")
+        await runner.cleanup()
+        if udp_task and not udp_task.done():
+            udp_task.cancel()
+            try:
+                await udp_task
+            except asyncio.CancelledError:
+                pass
+        print("Shutdown complete.")
 
 if __name__ == "__main__":
-    # Need to import re for coordinate parsing
-    import re
     try:
-        # Print initial header for console output
-        print_row(None, is_header=True)
+        print_row(None, is_header=True) # Print initial console header
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\nStopped by user")
     except Exception as e:
-        print(f"Unexpected error in main: {e}")
+        print(f"Unexpected error in main execution: {e}")

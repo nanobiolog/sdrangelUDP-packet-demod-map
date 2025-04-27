@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<![CDATA[<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -32,6 +32,8 @@
                 <button id="clear-filters">Clear Filters</button>
                 <h3>Actions</h3>
                 <button id="delete-all-messages">Delete All Messages</button>
+                <button id="enable-notifications">Enable Notifications</button> <!-- Added Notification Button -->
+                <button id="stop-sound" style="display: none;">Stop Sound</button> <!-- Added Stop Sound button -->
             </div>
             <ul id="message-list">
                 <!-- Messages will be added here -->
@@ -39,6 +41,8 @@
         </div>
         <!-- Detail panel moved to the beginning -->
     </div>
+    <audio id="notification-sound" src="notification.mp3" preload="auto"></audio> <!-- Added Audio Element -->
     <script src="script.js"></script>
 </body>
 </html>
+]]>
