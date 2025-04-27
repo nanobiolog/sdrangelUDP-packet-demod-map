@@ -129,7 +129,8 @@ body {
 #detail-panel {
     width: 350px; /* Width for the detail panel */
     height: 100%;
-    border-left: 1px solid #ccc;
+    /* border-left: 1px solid #ccc; */ /* Removed left border */
+    border-right: 1px solid #ccc; /* Added right border */
     background-color: #f9f9f9;
     padding: 10px;
     box-sizing: border-box;

@@ -137,6 +137,20 @@ function showDetailPanel(messageId) {
     if (listItem) {
         listItem.classList.add('highlighted');
     }
+
+    // --- Map Interaction ---
+    const callsign = aprsInfo.From;
+    const marker = markers[callsign];
+    // Check if marker exists and the message has coordinates
+    if (marker && aprsInfo.latitude !== null && aprsInfo.longitude !== null) {
+        const lat = aprsInfo.latitude;
+        const lon = aprsInfo.longitude;
+        const zoomLevel = 12; // Reduced zoom level
+
+        // Pan/zoom the map to the marker's location and open popup
+        map.flyTo([lat, lon], zoomLevel);
+        marker.openPopup();
+    }
 }
 
 // --- Message Handling ---

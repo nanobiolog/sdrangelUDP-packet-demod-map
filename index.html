@@ -14,6 +14,13 @@
 </head>
 <body>
     <div id="container">
+        <div id="detail-panel" class="hidden"> <!-- Moved detail panel first -->
+             <button id="detail-close-button" title="Close details">X</button>
+             <h2>Packet Details</h2>
+             <div id="detail-content">
+                 <!-- Details will be populated here -->
+             </div>
+        </div>
         <div id="map"></div>
         <div id="sidebar">
             <h2>APRS Data</h2>
@@ -30,13 +37,7 @@
                 <!-- Messages will be added here -->
             </ul>
         </div>
-        <div id="detail-panel" class="hidden">
-             <button id="detail-close-button" title="Close details">X</button>
-             <h2>Packet Details</h2>
-             <div id="detail-content">
-                 <!-- Details will be populated here -->
-             </div>
-        </div>
+        <!-- Detail panel moved to the beginning -->
     </div>
     <script src="script.js"></script>
 </body>
